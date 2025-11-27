@@ -1,353 +1,515 @@
+## Container Orchestration
 
-# 🛒 ShopNow E-Commerce - Kubernetes Learning Project
-
-ShopNow is a **Kubernetes learning project** built around a full-stack MERN e-commerce application:
-- **Customer App** (React frontend)  
-- **Admin Dashboard** (React admin panel)  
-- **Backend API** (Express + MongoDB)  
-
-This project teaches **Kubernetes** from container basics to production-ready deployments with Dockerfiles, Kubernetes manifests, Helm, GitOps and CICD using Jenkins.
-
-## 🎯 Learning Objectives
-- Write Dockerfiles for containerising the application
-- Master Kubernetes fundamentals through hands-on practice
-- Understand and implement HELM Chart for application deployment on kubernetes
-- Implement GitOps workflows using ArgoCD
-- Implement CICD pipelines using Jenkins
-
----
-
-## 📁 Project Structure
+This project provides production-ready Kubernetes manifests, HELM charts, and Jenkins pipeline configurations for deploying the ShopNow MERN stack application. The solution ensures high availability, scalability, and automated CI/CD workflows.
+Key Features
 
 ```
+Separate deployments for Frontend, Backend, and MongoDB
+Horizontal Pod Autoscaling (HPA) for dynamic scaling
+ConfigMaps and Secrets for environment configuration
+Persistent storage for MongoDB data
+HELM chart for simplified deployment and upgrades
+Jenkins pipeline for automated build and deployment
+Health checks and readiness probes
+Resource limits and requests for optimal performance
+Network policies for enhanced security
+
+Architecture
+┌─────────────────────────────────────────────────────────┐
+│                    Kubernetes Cluster                    │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌──────────────┐      ┌──────────────┐               │
+│  │   Ingress    │      │   Service    │               │
+│  │  Controller  │──────│   (LoadBalancer/NodePort)    │
+│  └──────────────┘      └──────────────┘               │
+│         │                      │                        │
+│         ├──────────────────────┼────────────────┐      │
+│         │                      │                 │      │
+│  ┌──────▼──────┐       ┌──────▼──────┐   ┌─────▼────┐│
+│  │  Frontend   │       │   Backend   │   │ MongoDB  ││
+│  │   (React)   │       │  (Node.js)  │   │          ││
+│  │  Deployment │◄──────│  Deployment │◄──│   StatefulSet││
+│  │  (3 replicas)│      │ (3 replicas)│   │  (3 replicas)││
+│  └─────────────┘       └─────────────┘   └──────────┘│
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │         ConfigMaps & Secrets                     │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │    Persistent Volumes (MongoDB Data)             │  │
+│  └──────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+Prerequisites
+
+Required Tools
+
+Kubernetes Cluster: v1.24+ (minikube, EKS, GKE, AKS, or self-hosted)
+
+kubectl: v1.24+
+
+Helm: v3.10+
+
+Docker: v20.10+
+
+Jenkins: v2.400+ (with required plugins)
+
+Git: v2.30+
+
+```
+Project Structure
 shopNow/
-├── backend/               # Node.js API server
-├── frontend/              # React customer app
-├── admin/                 # React admin dashboard
-├── kubernetes
-│   ├── k8s-manifests/     # Raw Kubernetes YAML files
-│   ├── helm/              # Helm charts for package management
-│   │   └── charts/        # Individual charts
-│   ├── argocd/            # GitOps deployment configs
-│   └── pre-req/           # Cluster prerequisites
-├── jenkins/               # Pipeline definitions (CI & CD)       
-├── docs/                  # learning resources and guides
-└── scripts/               # Automation and utility scripts
+├── k8s/                                    # Kubernetes manifests
+│   ├── namespace.yaml                      # Namespace definition
+│   ├── configmap.yaml                      # Application configuration
+│   ├── secrets.yaml                        # Sensitive data (base64 encoded)
+│   ├── mongodb/
+│   │   ├── statefulset.yaml               # MongoDB StatefulSet
+│   │   ├── service.yaml                   # MongoDB Service
+│   │   ├── pvc.yaml                       # Persistent Volume Claims
+│   │   └── mongodb-secret.yaml            # MongoDB credentials
+│   ├── backend/
+│   │   ├── deployment.yaml                # Backend Deployment
+│   │   ├── service.yaml                   # Backend Service
+│   │   ├── hpa.yaml                       # Horizontal Pod Autoscaler
+│   │   └── configmap.yaml                 # Backend-specific config
+│   ├── frontend/
+│   │   ├── deployment.yaml                # Frontend Deployment
+│   │   ├── service.yaml                   # Frontend Service
+│   │   └── hpa.yaml                       # Horizontal Pod Autoscaler
+│   └── ingress.yaml                        # Ingress configuration
+│
+├── helm/                                   # HELM chart
+│   └── shopnow/
+│       ├── Chart.yaml                      # Chart metadata
+│       ├── values.yaml                     # Default values
+│       ├── values-dev.yaml                 # Development overrides
+│       ├── values-staging.yaml             # Staging overrides
+│       ├── values-prod.yaml                # Production overrides
+│       └── templates/
+│           ├── namespace.yaml
+│           ├── configmap.yaml
+│           ├── secrets.yaml
+│           ├── mongodb-statefulset.yaml
+│           ├── mongodb-service.yaml
+│           ├── backend-deployment.yaml
+│           ├── backend-service.yaml
+│           ├── backend-hpa.yaml
+│           ├── frontend-deployment.yaml
+│           ├── frontend-service.yaml
+│           ├── frontend-hpa.yaml
+│           ├── ingress.yaml
+│           ├── _helpers.tpl               # Template helpers
+│           └── NOTES.txt                   # Post-install notes
+│
+├── jenkins/
+│   ├── Jenkinsfile                         # Main pipeline
+│   ├── Jenkinsfile.build                   # Build-only pipeline
+│   └── Jenkinsfile.deploy                  # Deploy-only pipeline
+│
+├── docker/
+│   ├── frontend/
+│   │   └── Dockerfile
+│   └── backend/
+│       └── Dockerfile
+│
+├── scripts/
+│   ├── setup-cluster.sh                    # Cluster setup script
+│   ├── deploy.sh                           # Deployment script
+│   ├── rollback.sh                         # Rollback script
+│   └── cleanup.sh                          # Cleanup script
+│
+├── docs/
+│   ├── architecture.md
+│   ├── deployment-guide.md
+│   ├── troubleshooting.md
+│   └── api-docs.md
+│
+└── README.md
+
 ```
 
----
-
-## 🚀 Learning Journey
-
-### Container & Kubernetes Basics
-1. **Start Here**: [docs/K8S-CONCEPTS.md](docs/K8S-CONCEPTS.md) - Core concepts explained
-2. **Raw Kubernetes Manifests**: `kubernetes/k8s-manifests/`
-
-### Package Management & Automation  
-3. **Helm Charts**: `kubernetes/helm/`
-4. **CI/CD Pipelines**: `jenkins/`
-
-### GitOps & Production Readiness
-5. **ArgoCD GitOps**: `kubernetes/argocd/`
-
-
-## Getting Started
-
-## 🛠 Prerequisites & Setup
-
-#### 1. Setup Tools**: [docs/TOOLS-SETUP-GUIDE.md](docs/TOOLS-SETUP-GUIDE.md)
-
-#### 2. AWS ECR Registry Setup 
-```bash
-# Setup AWS credentials first
-aws configure
-# Enter your AWS Access Key ID, Secret Access Key, region (us-east-1), and output format (json)
-
-# Or use environment variables
-export AWS_ACCESS_KEY_ID=your-access-key
-export AWS_SECRET_ACCESS_KEY=your-secret-key
-export AWS_DEFAULT_REGION=us-east-1
-
-# If above credentials are already set, run below command to verify
-aws sts get-caller-identity
-
-# Create ECR repositories either via the aws cli as mentioned below or via console (Has to be done once to create the ECR repo, skip this step when you are rebuilding the docker images):
-
-like:
-
-aws ecr create-repository --repository-name <your-username>-shopnow/frontend --region <region>
-aws ecr create-repository --repository-name <your-username>-shopnow/backend --region <region>
-aws ecr create-repository --repository-name <your-username>-shopnow/admin --region <region>
-
-# Get login token (run this command everytime as the docker credentials are persisted only on the terminal)
-aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <account-id>.dkr.ecr.<region>.amazonaws.com
-```
-
-
-#### 3. Update Configurations in below mentioned files
-
-
-## 🔧 Personalization Required
-
-**For Multi-User Kubernetes Clusters**: To avoid conflicts when multiple learners use the same cluster, each user must personalize their deployment with unique identifiers.
-
-**IMPORTANT**: This project contains hardcoded references that you must update with your own values:
-
-3.1. Replace "aryan" with your username in these locations:
-
-  **Ingress Paths** (in both Kubernetes manifests and Helm charts):
-   - `kubernetes/k8s-manifests/ingress/ingress-shopnow.yaml`
-     - Change `/aryan` to `/<your-username>`
-     - Change `/aryan-admin` to `/<your-username>-admin`
+Quick Start
+1. Clone the Repository
    
-   - `kubernetes/helm/charts/frontend/values.yaml`
-     - Change `path: /aryan` to `path: /<your-username>`
+git clone https://github.com/mohanDevOps-arch/shopNow.git
+
+cd shopNow
+
+3. Set Up Kubernetes Cluster
    
-   - `kubernetes/helm/charts/admin/values.yaml`
-     - Change `path: /aryan-admin` to `path: /<your-username>-admin`
+bash# For minikube (local development)
+minikube start --cpus=4 --memory=8192 --driver=docker
 
+# Enable required addons
+minikube addons enable ingress
+minikube addons enable metrics-server
 
-  **Nginx ConfigMaps**
-   - All references with 'aryan' to <your-username> in following files:
-   - `kubernetes/k8s-manifests/frontend/cm-nginx.yaml`   
-   - `kubernetes/k8s-manifests/admin/cm-nginx.yaml`
+3. Deploy with HELM (Recommended)
+bash# Create namespace
+kubectl create namespace shopnow
 
+# Install/Upgrade with HELM
+```
+helm upgrade --install shopnow ./helm/shopnow \
+  --namespace shopnow \
+  --values ./helm/shopnow/values-dev.yaml \
+  --create-namespace
+4. Verify Deployment
+bash# Check all resources
+kubectl get all -n shopnow
 
-  **Helm Chart Nginx Configurations**:
-   - All references with 'aryan' in the 'nginx.config' section to <your-username> in following files:
-   - `kubernetes/helm/charts/frontend/values.yaml` 
-   - `kubernetes/helm/charts/admin/values.yaml`
+# Check pod status
+kubectl get pods -n shopnow -w
 
-  **Dockerfiles** (Build Arguments):
-   - `frontend/Dockerfile`
-     - Change `ARG USER_NAME=aryan` to `ARG USER_NAME=<your-username>`
+# Get service URLs
+kubectl get ingress -n shopnow
+Kubernetes Deployment
+Manual Deployment Steps
+Step 1: Create Namespace
+bashkubectl apply -f k8s/namespace.yaml
+Step 2: Create Secrets
+bash# Create MongoDB secret
+kubectl create secret generic mongodb-secret \
+  --from-literal=mongodb-root-password=your-root-password \
+  --from-literal=mongodb-password=your-password \
+  --namespace=shopnow
+
+# Create Docker registry secret (if using private registry)
+kubectl create secret docker-registry regcred \
+  --docker-server=your-registry-server \
+  --docker-username=your-username \
+  --docker-password=your-password \
+  --docker-email=your-email \
+  --namespace=shopnow
+Step 3: Deploy MongoDB
+bashkubectl apply -f k8s/mongodb/pvc.yaml
+kubectl apply -f k8s/mongodb/statefulset.yaml
+kubectl apply -f k8s/mongodb/service.yaml
+Step 4: Deploy Backend
+bashkubectl apply -f k8s/backend/configmap.yaml
+kubectl apply -f k8s/backend/deployment.yaml
+kubectl apply -f k8s/backend/service.yaml
+kubectl apply -f k8s/backend/hpa.yaml
+Step 5: Deploy Frontend
+bashkubectl apply -f k8s/frontend/deployment.yaml
+kubectl apply -f k8s/frontend/service.yaml
+kubectl apply -f k8s/frontend/hpa.yaml
+Step 6: Configure Ingress
+bashkubectl apply -f k8s/ingress.yaml
+Verification Commands
+bash# Check deployment status
+kubectl rollout status deployment/backend -n shopnow
+kubectl rollout status deployment/frontend -n shopnow
+
+# View logs
+kubectl logs -f deployment/backend -n shopnow
+kubectl logs -f deployment/frontend -n shopnow
+
+# Access application
+kubectl port-forward svc/frontend 3000:80 -n shopnow
+HELM Chart Deployment
+Chart Installation
+bash# Development environment
+helm install shopnow ./helm/shopnow \
+  -f ./helm/shopnow/values-dev.yaml \
+  -n shopnow --create-namespace
+
+# Staging environment
+helm install shopnow ./helm/shopnow \
+  -f ./helm/shopnow/values-staging.yaml \
+  -n shopnow-staging --create-namespace
+
+# Production environment
+helm install shopnow ./helm/shopnow \
+  -f ./helm/shopnow/values-prod.yaml \
+  -n shopnow-prod --create-namespace
+Chart Upgrade
+bashhelm upgrade shopnow ./helm/shopnow \
+  -f ./helm/shopnow/values-prod.yaml \
+  -n shopnow-prod
+Chart Rollback
+bash# List releases
+helm list -n shopnow-prod
+
+# View history
+helm history shopnow -n shopnow-prod
+
+# Rollback to previous version
+helm rollback shopnow -n shopnow-prod
+
+# Rollback to specific revision
+helm rollback shopnow 3 -n shopnow-prod
+Chart Uninstallation
+bashhelm uninstall shopnow -n shopnow-prod
+Customizing Values
+Override default values by creating a custom values file:
+bashhelm install shopnow ./helm/shopnow \
+  -f ./helm/shopnow/values-prod.yaml \
+  -f ./my-custom-values.yaml \
+  -n shopnow-prod
+Jenkins CI/CD Pipeline
+Pipeline Overview
+The Jenkins pipeline automates the following stages:
+
+Checkout: Clone source code from GitHub
+Build: Build Docker images for frontend and backend
+Test: Run unit and integration tests
+Push: Push Docker images to container registry
+Deploy: Deploy to Kubernetes using HELM
+Verify: Run smoke tests and health checks
+Notify: Send notifications on success/failure
+```
+
+Pipeline Setup
+1. Create Jenkins Credentials
    
-   - `admin/Dockerfile`
-     - Change `ARG USER_NAME=aryan` to `ARG USER_NAME=<your-username>`
+Navigate to Jenkins → Credentials → System → Global credentials and add:
 
-  **Build Script** (optional):
-   - `scripts/build-and-push.sh`
-     - Update the example usage comments that reference "aryan"
+GitHub Token: github-token (Secret text)
 
-3.2. **ECR Repository Names** - Update to your username:
-   - All `kubernetes/k8s-manifests/*/deployment.yaml` files
-   - All `kubernetes/helm/charts/*/values.yaml` files
-   - All `jenkins\Jenkinsfile.*.*` files
-   - Change `shopnow/frontend` to `<your-username>-shopnow/frontend`
-   - Change `shopnow/backend` to `<your-username>-shopnow/backend`
-   - Change `shopnow/admin` to `<your-username>-shopnow/admin`
+Docker Registry: docker-credentials (Username/Password)
 
-3.3. **Update Namespace** on these locations:
-  - `kubernetes/k8s-manifests/namespace/namespace.yaml` - Change namespace name
-  - All files in `kubernetes/k8s-manifests/*/` - Update namespace references
-  - `kubernetes/argocd/apps/*.yaml` - Update destination namespace
-  - All kubectl commands in this README - Replace `shopnow-demo` with your namespace
+Kubeconfig: kubeconfig (Secret file)
 
-3.4. **Update ArgoCD Repository URL**:
-  - In `kubernetes/argocd/umbrella-application.yaml` and all `kubernetes/argocd/apps/*.yaml` files:
-  - Change `repoURL: 'https://github.com/aryanm12/shopNow'` 
-  - To `repoURL: 'https://github.com/<your-github-username>/<your-repo-name>'`
+Slack Webhook: slack-webhook (Secret text - optional)
+
+2. Create Jenkins Pipeline Job
+
+New Item → Pipeline
+Configure:
+
+GitHub project: https://github.com/mohanDevOps-arch/shopNow
+
+Pipeline Definition: Pipeline script from SCM
+
+SCM: Git
+
+Repository URL: https://github.com/mohanDevOps-arch/shopNow.git
+
+Script Path: jenkins/Jenkinsfile
+
+Branch: */main
 
 
 
-#### 4. Kubernetes Cluster Access (Make sure to have a running Kubernetes cluster, here is an example to connect with EKS)
-```bash
-# For EKS cluster
-aws eks update-kubeconfig --region <region> --name <your-cluster-name>
+3. Configure Webhooks
 
-# Verify access
-kubectl cluster-info
-kubectl get nodes
-```
+In GitHub repository settings:
 
-Note: All the below mentioned kubectl commands assume that you are working with "shopnow-demo" namespace, update the namespace as per yours where ever you find "shopnow-demo".
+Add webhook: http://your-jenkins-url/github-webhook/
 
-#### 5. Docker Registry Secret (Only required for private ECR registry)
-**Note**: Skip this step if using public Docker Hub images or public ECR repositories.
+Content type: application/json
 
-```bash
-# Create registry secret for private ECR image pulls
-kubectl create ns shopnow-demo
-kubectl create secret docker-registry ecr-secret --docker-server=<account-id>.dkr.ecr.us-east-1.amazonaws.com --docker-username=AWS --docker-password=$(aws ecr get-login-password --region us-east-1) --namespace=shopnow-demo
-```
-
-#### 6. Install Pre-requisites in the Kubernetes Environment (Has to be done once per Kubernetes Cluster)
-```bash
-# Install metrics server (required for resource monitoring and HPA)
-kubectl apply -f kubernetes/pre-req/metrics-server.yaml
-
-# Install ingress-nginx controller (for external access)
-# For EKS, other cloud provider will have different file
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0-beta.0/deploy/static/provider/aws/deploy.yaml
-
-# For local development (minikube/kind/Docker Desktop)
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/kind/deploy.yaml
-
-# Verify installations
-kubectl get pods -n kube-system
-kubectl get pods -n ingress-nginx
-kubectl top nodes  # Should work after metrics server is running
-kubectl top pods  # Should work after metrics server is running
-
-# To enable Persistent Storage
-
-# First install the EBS CSI driver as an EKS Addon
-
--> In the EKS Console, open your cluster → go to Add-ons → click Get more add-ons → select Amazon EBS CSI driver → click Next.
--> On the configuration page, Under Pod identity association, choose Create a new IAM role, and the console will auto-attach the AmazonEBSCSIDriverPolicy.
--> Confirm and click Create. The add-on installs, the IAM role is associated with the SA via Pod Identity, and the driver starts running.
--> Verify under Add-ons tab that the EBS CSI driver is active and under Pod identity associations tab you see the SA <-> IAM role mapping.
-
-# Install storage class for persistent volumes
-kubectl apply -f kubernetes/pre-req/storageclass-gp3.yaml
-
-# Verify storage class installation
-kubectl get storageclass
-
+Events: Push, Pull Request
 
 ```
+Pipeline Parameters
+groovyparameters {
+    choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'prod'], description: 'Deployment environment')
+    string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag')
+    booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run tests before deployment')
+    booleanParam(name: 'SKIP_BUILD', defaultValue: false, description: 'Skip build stage')
+}
+Running the Pipeline
+bash# Trigger pipeline manually
+# Jenkins UI → Build with Parameters
 
+# Trigger via webhook (automatic on git push)
+git commit -m "Update application"
+git push origin main
+Pipeline Stages Explained
+Build Stage
+groovystage('Build Docker Images') {
+    steps {
+        script {
+            docker.build("shopnow-backend:${IMAGE_TAG}", "./backend")
+            docker.build("shopnow-frontend:${IMAGE_TAG}", "./frontend")
+        }
+    }
+}
+Deploy Stage
+groovystage('Deploy to Kubernetes') {
+    steps {
+        script {
+            sh """
+                helm upgrade --install shopnow ./helm/shopnow \
+                  -f ./helm/shopnow/values-${ENVIRONMENT}.yaml \
+                  --set backend.image.tag=${IMAGE_TAG} \
+                  --set frontend.image.tag=${IMAGE_TAG} \
+                  --namespace shopnow-${ENVIRONMENT}
+            """
+        }
+    }
+}
+Configuration
+Environment Variables
+Backend Configuration
+yamlNODE_ENV: production
+PORT: 5000
+MONGODB_URI: mongodb://mongodb-service:27017/shopnow
+JWT_SECRET: <your-jwt-secret>
+JWT_EXPIRE: 30d
+CORS_ORIGIN: https://shopnow.example.com
+Frontend Configuration
+yamlREACT_APP_API_URL: https://api.shopnow.example.com
+REACT_APP_ENV: production
+Resource Limits
+yaml# Backend
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
 
-## ⚡ Build and Deploy the micro-services
+# Frontend
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
 
-### 1. Build the docker images and push it to the ECR registry created above
+# MongoDB
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+Autoscaling Configuration
+yaml# Backend HPA
+minReplicas: 2
+maxReplicas: 10
+targetCPUUtilizationPercentage: 70
+targetMemoryUtilizationPercentage: 80
 
-```bash
-scripts/build-and-push.sh <account-id>.dkr.ecr.<region>.amazonaws.com/<registry-name> <tag-name-number> <your-username> 
+# Frontend HPA
+minReplicas: 2
+maxReplicas: 5
+targetCPUUtilizationPercentage: 75
+Monitoring & Logging
+Prometheus Metrics
+bash# Install Prometheus
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring
 
-# Example for user 'aryan' with tag 'latest' and ECR registry '975050024946.dkr.ecr.ap-southeast-1.amazonaws.com/shopnow':
-./scripts/build-and-push.sh 975050024946.dkr.ecr.ap-southeast-1.amazonaws.com/shopnow latest aryan
+# Access Prometheus
+kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090
+Grafana Dashboards
+bash# Access Grafana
+kubectl port-forward -n monitoring svc/prometheus-grafana 3000:80
 
+# Default credentials
+Username: admin
+Password: prom-operator
+Application Logs
+bash# Stream backend logs
+kubectl logs -f deployment/backend -n shopnow
+
+# Stream frontend logs
+kubectl logs -f deployment/frontend -n shopnow
+
+# View MongoDB logs
+kubectl logs -f statefulset/mongodb -n shopnow
+
+# Aggregate logs from all pods
+kubectl logs -l app=backend -n shopnow --tail=100
+ELK Stack Integration
+yaml# Add filebeat sidecar to deployments
+- name: filebeat
+  image: docker.elastic.co/beats/filebeat:8.5.0
+  volumeMounts:
+  - name: logs
+    mountPath: /var/log/app
+Troubleshooting
+Common Issues
+Pods Not Starting
+bash# Check pod status
+kubectl describe pod <pod-name> -n shopnow
+
+# Common causes:
+# - Image pull errors: Check imagePullSecrets
+# - Resource constraints: Check node resources
+# - Configuration errors: Check ConfigMaps/Secrets
+Backend Cannot Connect to MongoDB
+bash# Verify MongoDB is running
+kubectl get pods -l app=mongodb -n shopnow
+
+# Check MongoDB service
+kubectl get svc mongodb-service -n shopnow
+
+# Test connectivity
+kubectl exec -it deployment/backend -n shopnow -- nc -zv mongodb-service 27017
+Frontend Not Accessible
+bash# Check ingress configuration
+kubectl get ingress -n shopnow
+kubectl describe ingress shopnow-ingress -n shopnow
+
+# Check ingress controller logs
+kubectl logs -n ingress-nginx deployment/ingress-nginx-controller
+HPA Not Scaling
+bash# Check metrics server
+kubectl top nodes
+kubectl top pods -n shopnow
+
+# Check HPA status
+kubectl get hpa -n shopnow
+kubectl describe hpa backend-hpa -n shopnow
+Debug Commands
+bash# Get all resources in namespace
+kubectl get all -n shopnow
+
+# Check events
+kubectl get events -n shopnow --sort-by='.lastTimestamp'
+
+# Execute commands in pod
+kubectl exec -it <pod-name> -n shopnow -- /bin/sh
+
+# Check resource usage
+kubectl top pods -n shopnow
+kubectl top nodes
+
+# View configuration
+kubectl get configmap -n shopnow -o yaml
+kubectl get secret -n shopnow
+Rollback Procedure
+bash# Kubernetes rollback
+kubectl rollout undo deployment/backend -n shopnow
+kubectl rollout undo deployment/frontend -n shopnow
+
+# HELM rollback
+helm rollback shopnow -n shopnow
+
+# Verify rollback
+kubectl rollout status deployment/backend -n shopnow
 
 ```
 
-### 2. Choose Your Deployment Method
+Security Considerations |
+Best Practices Implemented
 
-**Option A: Raw Kubernetes Manifests**
-```bash
-kubectl apply -f kubernetes/k8s-manifests/namespace/
-kubectl apply -f kubernetes/k8s-manifests/database/
-kubectl apply -f kubernetes/k8s-manifests/backend/
-kubectl apply -f kubernetes/k8s-manifests/frontend/
-kubectl apply -f kubernetes/k8s-manifests/admin/
-kubectl apply -f kubernetes/k8s-manifests/ingress/
-kubectl apply -f kubernetes/k8s-manifests/daemonsets-example/
-```
+Secrets stored in Kubernetes Secrets (base64 encoded)
 
-**Option B: Helm Charts**
+RBAC policies for service accounts
 
-```bash
-helm upgrade --install mongo kubernetes/helm/charts/mongo -n shopnow-demo --create-namespace
-helm upgrade --install backend kubernetes/helm/charts/backend -n shopnow-demo
-helm upgrade --install frontend kubernetes/helm/charts/frontend -n shopnow-demo
-helm upgrade --install admin kubernetes/helm/charts/admin -n shopnow-demo
-```
+Network policies to restrict traffic
 
-**Option C: ArgoCD GitOps**
-```bash
-# Install ArgoCD first
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+Non-root containers
 
-# Create target namespace
-kubectl create namespace shopnow-demo
+Read-only root filesystem where possible
 
-# Deploy applications
-kubectl apply -f kubernetes/argocd/umbrella-application.yaml
+Resource limits to prevent DoS
 
-# Check all ArgoCD application status:
-kubectl get applications -n argocd
+Image scanning in CI pipeline
 
-```
+TLS/SSL for ingress traffic
 
-### 3. Create users in MongoDB after the mongodb pods are healthy
-
-```bash
-
-# check the status of the mongo-0 pods 
-kubectl get pods -n shopnow-demo
-
-# if mongo-0 pod is healthy, then run following command to create a user for the backend to connect
-# user credentials should be same as mentioned in the backend secrets-db.yaml file
-# First exex into the pods
-kubectl -n shopnow-demo exec -it mongo-0 -- mongosh
-
-# Run below commands
-use admin;
-db.createUser({
-  user: 'shopuser',
-  pwd: 'ShopNowPass123',
-  roles: [
-    { role: 'readWrite', db: 'shopnow' },
-    { role: 'dbAdmin', db: 'shopnow' }
-  ]
-});
-
-exit
-
-# Restart backend deployment
-kubectl rollout restart deploy backend -n shopnow-demo
-```
-
-### 3. Check the resources deployed
-
-```bash
-# Check Pods
-kubectl get pods -n shopnow-demo
-
-# Check Deployment
-kubectl get deploy -n shopnow-demo
-
-# Check Services
-kubectl get svc -n shopnow-demo
-
-# Check daemonsets
-kubectl get daemonsets -n shopnow-demo
-
-# Check statefulsets
-kubectl get statefulsets -n shopnow-demo
-
-# Check HPA
-kubectl get hpa -n shopnow-demo
-
-# Check all of the above at once
-kubectl get all -n shopnow-demo
-
-# Check configmaps
-kubectl get cm -n shopnow-demo
-
-# Check secrets
-kubectl get secrets -n shopnow-demo
-
-# Check ingress
-kubectl get ing -n shopnow-demo
-
-# Sequence to debug in case of any issue with the pods
-kubectl get pods -n shopnow-demo
-kubectl describe pod backend-746cc99cd-cqrgf -n shopnow-demo # Assuming that pod backend-746cc99cd-cqrgf has an error
-kubectl logs backend-746cc99cd-cqrgf -n shopnow-demo --previous # If no details are found in the above command or if details like liveness probe failed are coming
-
-```
-
-
----
-
-## 🌐 Access the Apps
-
-* **Customer App** → [http://<load-balancer-ip-or-dns>/<your-username>](http://<load-balancer-ip-or-dns>/<your-username>)
-* **Admin Dashboard** → [http://<load-balancer-ip-or-dns>/<your-username>-admin](http://<load-balancer-ip-or-dns>/<your-username>-admin)
-
----
-
-## Additional Notes
-
-**Check the Application Architecture details**: [docs/APPLICATION-ARCHITECTURE.md](docs/APPLICATION-ARCHITECTURE.md)
-**Check the Troubleshooting Guide**: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
----
-
-## 👨‍💻 Author
-
-## K Mohan Krishna
-
----
-
+Pod Security Standards enforced
